@@ -22,7 +22,7 @@ interface OpenBody {
   action?: FileLaunchAction;
 }
 
-export function createCodexMateServer(options: CreateServerOptions): Server {
+export function createCoMateServer(options: CreateServerOptions): Server {
   return createServer((request, response) => {
     handleRequest(options, request, response).catch((error) => {
       const message = error instanceof Error ? error.message : "Unexpected server error.";

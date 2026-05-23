@@ -1,6 +1,6 @@
 # Security
 
-Codex Mate is a fully local app. It indexes files from the Codex desktop app data folder on the user's machine and serves the UI through a localhost-only server.
+CoMate is a fully local app. It indexes files from the Codex desktop app data folder on the user's machine and serves the UI through a localhost-only server.
 
 ## Reporting a Vulnerability
 

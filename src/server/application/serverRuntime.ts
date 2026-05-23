@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 
-import { createCodexMateServer } from "../api/httpServer.js";
+import { createCoMateServer } from "../api/httpServer.js";
 import { resolveCodexPaths } from "../config/paths.js";
 import type { CodexPaths } from "../domain/types.js";
 import { detectCodexDesktopData } from "../infrastructure/codexDesktopDetector.js";
@@ -12,7 +12,7 @@ import { IndexingService } from "./indexingService.js";
 import { LibraryService } from "./libraryService.js";
 import type { ReindexResult } from "../../shared/types.js";
 
-export interface CodexMateRuntime {
+export interface CoMateRuntime {
   close: () => Promise<void>;
   initialIndex: Promise<ReindexResult>;
   port: number;
@@ -20,14 +20,14 @@ export interface CodexMateRuntime {
   url: string;
 }
 
-export interface StartCodexMateRuntimeOptions {
+export interface StartCoMateRuntimeOptions {
   codexPaths?: Partial<CodexPaths>;
   host?: string;
   port: number;
   staticDir: string | null;
 }
 
-export async function startCodexMateRuntime(options: StartCodexMateRuntimeOptions): Promise<CodexMateRuntime> {
+export async function startCoMateRuntime(options: StartCoMateRuntimeOptions): Promise<CoMateRuntime> {
   const host = options.host ?? "127.0.0.1";
   const codexPaths = resolveCodexPaths(options.codexPaths);
   const index = await SqliteImageIndex.open(codexPaths.databasePath);
@@ -40,7 +40,7 @@ export async function startCodexMateRuntime(options: StartCodexMateRuntimeOption
 
   try {
     const initialIndex = indexing.startInitialIndex();
-    const server = createCodexMateServer({
+    const server = createCoMateServer({
       codexPaths,
       index,
       indexing,

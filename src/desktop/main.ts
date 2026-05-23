@@ -5,14 +5,16 @@ import { createMainWindow } from "./application/mainWindow.js";
 import { startDesktopServer } from "./application/desktopServer.js";
 import { resolveDesktopStaticDir } from "./config/desktopPaths.js";
 import { waitForHttp } from "./utils/waitForHttp.js";
-import type { CodexMateRuntime } from "../server/application/serverRuntime.js";
+import type { CoMateRuntime } from "../server/application/serverRuntime.js";
 
 const { app, BrowserWindow, dialog } = electron;
 
+app.setName("CoMate");
 app.commandLine.appendSwitch("password-store", "basic");
+app.commandLine.appendSwitch("use-mock-keychain");
 
 let mainWindow: BrowserWindowType | null = null;
-let runtime: CodexMateRuntime | null = null;
+let runtime: CoMateRuntime | null = null;
 let closingRuntime = false;
 
 if (!app.requestSingleInstanceLock()) {
@@ -69,7 +71,7 @@ async function bootstrap(): Promise<void> {
     openMainWindow(runtime.url);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected startup error.";
-    dialog.showErrorBox("Codex Mate failed to start", message);
+    dialog.showErrorBox("CoMate failed to start", message);
     app.quit();
   }
 }

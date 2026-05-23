@@ -11,11 +11,11 @@ export function createMainWindow(url: string): BrowserWindowType {
     minHeight: 680,
     minWidth: 980,
     show: false,
-    title: "Codex Mate",
+    title: "CoMate",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: "codex-mate-memory",
+      partition: "comate-memory",
       sandbox: true
     },
     width: 1280

@@ -38,7 +38,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
         with:
-          name: codex-mate-macos
+          name: comate-macos
           path: |
             release/*.dmg
             release/*.zip
@@ -51,4 +51,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip \
             --title "$GITHUB_REF_NAME" \
-            --notes "Unsigned macOS build for Codex Mate. This app is fully local and built for the Codex desktop app."
+            --notes "Unsigned macOS build for CoMate. This app is fully local and built for the Codex desktop app."

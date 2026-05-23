@@ -1,23 +1,23 @@
 import path from "node:path";
 import process from "node:process";
 
-import { startCodexMateRuntime } from "./application/serverRuntime.js";
+import { startCoMateRuntime } from "./application/serverRuntime.js";
 import { DEFAULT_API_PORT, DEFAULT_WEB_PORT } from "./config/paths.js";
 
 async function main(): Promise<void> {
-  const isDevApi = process.env.CODEX_MATE_DEV_API === "1";
+  const isDevApi = process.env.COMATE_DEV_API === "1";
   const port = isDevApi ? DEFAULT_API_PORT : DEFAULT_WEB_PORT;
   const staticDir = isDevApi ? null : path.resolve(process.cwd(), "dist-web");
 
-  const runtime = await startCodexMateRuntime({
+  const runtime = await startCoMateRuntime({
     port,
     staticDir
   });
 
-  console.log(`Codex Mate listening at ${runtime.url}`);
+  console.log(`CoMate listening at ${runtime.url}`);
   runtime.initialIndex
     .then((result) => {
-      console.log(`Codex Mate indexed ${result.indexed} image(s) in ${result.durationMs}ms.`);
+      console.log(`CoMate indexed ${result.indexed} image(s) in ${result.durationMs}ms.`);
     })
     .catch((error) => {
       console.error(error);

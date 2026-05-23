@@ -1,10 +1,10 @@
 # Open Source Release Notes
 
-This document tracks the public-release checklist for Codex Mate.
+This document tracks the public-release checklist for CoMate.
 
 ## Positioning
 
-Codex Mate is a local companion app for the Codex desktop app, not Codex CLI. It scans Codex Desktop-generated images on the user's machine, links them to local session metadata, and presents a private gallery.
+CoMate is a local companion app for the Codex desktop app, not Codex CLI. It scans Codex Desktop-generated images on the user's machine, links them to local session metadata, and presents a private gallery.
 
 ## Privacy Model
 
@@ -16,7 +16,7 @@ Codex Mate is a local companion app for the Codex desktop app, not Codex CLI. It
 
 ## Repository Hygiene
 
-- `node_modules/`, `dist-*`, `release/`, `.env*`, `.codex-mate*`, logs, and coverage are ignored.
+- `node_modules/`, `dist-*`, `release/`, `.env*`, `.comate*`, logs, and coverage are ignored.
 - MIT license is included.
 - Contribution and security guidelines are included.
 - GitHub Actions run tests and production builds on pull requests and pushes.

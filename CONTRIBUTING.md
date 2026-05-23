@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Codex Mate.
+Thanks for helping improve CoMate.
 
 ## Local Setup
 
@@ -18,7 +18,7 @@ npm run desktop
 
 ## Privacy Boundary
 
-Codex Mate is designed as a fully local companion for the Codex desktop app. Contributions should preserve that boundary:
+CoMate is designed as a fully local companion for the Codex desktop app. Contributions should preserve that boundary:
 
 - Do not add telemetry, analytics, or remote uploads.
 - Do not commit generated images, session logs, SQLite databases, build output, or private local paths.

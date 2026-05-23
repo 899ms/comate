@@ -7,7 +7,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { LibraryService } from "../src/server/application/libraryService.js";
-import { startCodexMateRuntime } from "../src/server/application/serverRuntime.js";
+import { startCoMateRuntime } from "../src/server/application/serverRuntime.js";
 import { detectCodexDesktopData } from "../src/server/infrastructure/codexDesktopDetector.js";
 import { CodexImageScanner } from "../src/server/infrastructure/codexImageScanner.js";
 import { CodexSessionRepository } from "../src/server/infrastructure/codexSessionRepository.js";
@@ -23,7 +23,7 @@ import { StartupScreen } from "../src/web/components/StartupScreen.js";
 const PNG_1X1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
 async function main(): Promise<void> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-mate-test-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "comate-test-"));
 
   try {
     await testCodexDesktopDetection(root);
@@ -323,15 +323,15 @@ function testGalleryViewRendering(): void {
 
 async function testEmbeddedRuntime(root: string): Promise<void> {
   const codexRoot = path.join(root, ".codex-empty");
-  const appDataDir = path.join(root, ".codex-mate-empty");
+  const appDataDir = path.join(root, ".comate-empty");
   const port = await findAvailablePort(48_880);
-  const runtime = await startCodexMateRuntime({
+  const runtime = await startCoMateRuntime({
     codexPaths: {
       codexRoot,
       generatedImagesDir: path.join(codexRoot, "generated_images"),
       sessionIndexPath: path.join(codexRoot, "session_index.jsonl"),
       sessionsDir: path.join(codexRoot, "sessions"),
-      databasePath: path.join(appDataDir, "codex-mate.sqlite")
+      databasePath: path.join(appDataDir, "comate.sqlite")
     },
     port,
     staticDir: null

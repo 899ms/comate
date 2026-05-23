@@ -46,7 +46,7 @@ export function Sidebar({
         <div className="sidebar-brand">
           <span className="brand-mark">CM</span>
           <div className="brand-copy">
-            <span className="brand-name">Codex Mate</span>
+            <span className="brand-name">CoMate</span>
             <span>{loading ? "Loading" : `${imageTotal} images`}</span>
           </div>
           <button className="icon-button" onClick={onRefresh} disabled={refreshing} title="Refresh">
