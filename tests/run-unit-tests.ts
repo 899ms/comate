@@ -18,8 +18,15 @@ import { DetailPanel } from "../src/web/components/DetailPanel.js";
 import { GalleryPane } from "../src/web/components/GalleryPane.js";
 import { SearchOverlay } from "../src/web/components/SearchOverlay.js";
 import { Sidebar } from "../src/web/components/Sidebar.js";
+import { SidebarResizeHandle } from "../src/web/components/SidebarResizeHandle.js";
 import { StartupScreen } from "../src/web/components/StartupScreen.js";
 import { WorkspaceBar } from "../src/web/components/WorkspaceBar.js";
+import {
+  clampSidebarWidth,
+  getSidebarDragResult,
+  getSidebarWidthCssValue,
+  SIDEBAR_WIDTH_CONFIG
+} from "../src/web/domain/sidebarResize.js";
 import {
   getImageWorkspaceHeader,
   getWorkspaceClassName,
@@ -40,6 +47,10 @@ async function main(): Promise<void> {
     console.log("ok web/search-ui");
     testWorkspaceLayoutModel();
     console.log("ok web/workspace-layout");
+    testSidebarResizeModel();
+    console.log("ok web/sidebar-resize");
+    testSidebarResizeHandleRendering();
+    console.log("ok web/sidebar-resize-handle");
     testWorkspaceBarRendering();
     console.log("ok web/workspace-bar");
     testStartupScreenRendering();
@@ -364,6 +375,96 @@ function testWorkspaceLayoutModel(): void {
   });
   assert.equal(fallbackHeader.title, "图片浏览");
   assert.match(fallbackHeader.context, /Loading/);
+}
+
+function testSidebarResizeModel(): void {
+  assert.equal(clampSidebarWidth(120), SIDEBAR_WIDTH_CONFIG.minWidth);
+  assert.equal(clampSidebarWidth(260), 260);
+  assert.equal(clampSidebarWidth(420), SIDEBAR_WIDTH_CONFIG.maxWidth);
+  assert.equal(clampSidebarWidth(Number.NaN), SIDEBAR_WIDTH_CONFIG.defaultWidth);
+  assert.equal(getSidebarWidthCssValue(240), "240px");
+
+  const resized = getSidebarDragResult({
+    currentWidth: 212,
+    pointerX: 250,
+    startPanelState: "expanded",
+    startPointerX: 200,
+    startWidth: 212
+  });
+  assert.deepEqual(resized, {
+    panelState: "expanded",
+    shouldCompleteDrag: false,
+    width: 262
+  });
+
+  const collapsedFromExpanded = getSidebarDragResult({
+    currentWidth: 212,
+    pointerX: 120,
+    startPanelState: "expanded",
+    startPointerX: 200,
+    startWidth: 212
+  });
+  assert.deepEqual(collapsedFromExpanded, {
+    panelState: "collapsed",
+    shouldCompleteDrag: true,
+    width: 212
+  });
+
+  const staysCollapsedUntilThreshold = getSidebarDragResult({
+    currentWidth: 212,
+    pointerX: 140,
+    startPanelState: "collapsed",
+    startPointerX: 100,
+    startWidth: 212
+  });
+  assert.deepEqual(staysCollapsedUntilThreshold, {
+    panelState: "collapsed",
+    shouldCompleteDrag: false,
+    width: 212
+  });
+
+  const expandsFromCollapsed = getSidebarDragResult({
+    currentWidth: 212,
+    pointerX: 205,
+    startPanelState: "collapsed",
+    startPointerX: 100,
+    startWidth: 212
+  });
+  assert.deepEqual(expandsFromCollapsed, {
+    panelState: "expanded",
+    shouldCompleteDrag: false,
+    width: SIDEBAR_WIDTH_CONFIG.minWidth
+  });
+}
+
+function testSidebarResizeHandleRendering(): void {
+  const markup = renderToStaticMarkup(
+    createElement(SidebarResizeHandle, {
+      "aria-label": "Resize sidebar",
+      "aria-orientation": "vertical",
+      "aria-valuemax": SIDEBAR_WIDTH_CONFIG.maxWidth,
+      "aria-valuemin": SIDEBAR_WIDTH_CONFIG.minWidth,
+      "aria-valuenow": SIDEBAR_WIDTH_CONFIG.defaultWidth,
+      isResizing: true,
+      panelState: "expanded",
+      role: "separator",
+      tabIndex: 0
+    })
+  );
+
+  assert.match(markup, /class="sidebar-resize-handle resizing"/);
+  assert.match(markup, /role="separator"/);
+  assert.match(markup, /aria-orientation="vertical"/);
+  assert.match(markup, /aria-valuenow="212"/);
+
+  const collapsedMarkup = renderToStaticMarkup(
+    createElement(SidebarResizeHandle, {
+      isResizing: false,
+      panelState: "collapsed",
+      role: "separator"
+    })
+  );
+  assert.match(collapsedMarkup, /class="sidebar-resize-handle collapsed"/);
 }
 
 function testWorkspaceBarRendering(): void {

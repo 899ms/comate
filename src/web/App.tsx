@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import type { DatePreset, ImageRecord, ImageSearchResult, PromptState, RuntimeStatus } from "../shared/types.js";
 import { fetchImages, fetchRuntimeStatus, reindexLibrary } from "./api/client.js";
@@ -6,14 +6,17 @@ import { DetailPanel } from "./components/DetailPanel.js";
 import { GalleryPane } from "./components/GalleryPane.js";
 import { SearchOverlay } from "./components/SearchOverlay.js";
 import { Sidebar } from "./components/Sidebar.js";
+import { SidebarResizeHandle } from "./components/SidebarResizeHandle.js";
 import { StartupScreen, type StartupScreenMode } from "./components/StartupScreen.js";
 import { WorkspaceBar } from "./components/WorkspaceBar.js";
+import { getSidebarWidthCssValue, SIDEBAR_WIDTH_CONFIG } from "./domain/sidebarResize.js";
 import {
   getImageWorkspaceHeader,
   getWorkspaceClassName,
   togglePanelState,
   type WorkspacePanelState
 } from "./domain/workspaceLayout.js";
+import { useSidebarResize } from "./hooks/useSidebarResize.js";
 
 const EMPTY_RESULT: ImageSearchResult = {
   items: [],
@@ -37,6 +40,7 @@ export function App() {
   const [result, setResult] = useState<ImageSearchResult>(EMPTY_RESULT);
   const [galleryMetaVisible, setGalleryMetaVisible] = useState(true);
   const [leftPanelState, setLeftPanelState] = useState<WorkspacePanelState>("expanded");
+  const [leftPanelWidth, setLeftPanelWidth] = useState(SIDEBAR_WIDTH_CONFIG.defaultWidth);
   const [rightPanelState, setRightPanelState] = useState<WorkspacePanelState>("expanded");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -156,7 +160,22 @@ export function App() {
       }),
     [datePreset, loading, promptState, query, result.total, selectedImage, sessionId]
   );
-  const workspaceClassName = getWorkspaceClassName({ left: leftPanelState, right: rightPanelState });
+  const sidebarResize = useSidebarResize({
+    panelState: leftPanelState,
+    width: leftPanelWidth,
+    onPanelStateChange: setLeftPanelState,
+    onWidthChange: setLeftPanelWidth
+  });
+  const workspaceClassName = [
+    getWorkspaceClassName({ left: leftPanelState, right: rightPanelState }),
+    sidebarResize.isResizing ? "left-resizing" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const workspaceStyle = {
+    "--left-panel-width": getSidebarWidthCssValue(leftPanelWidth),
+    "--left-panel-rail-width": `${SIDEBAR_WIDTH_CONFIG.collapsedWidth}px`
+  } as CSSProperties;
 
   async function handleRefresh(): Promise<void> {
     setRefreshing(true);
@@ -210,7 +229,7 @@ export function App() {
     <div className="app-shell">
       {error ? <div className="error-strip">{error}</div> : null}
 
-      <div className={workspaceClassName}>
+      <div className={workspaceClassName} style={workspaceStyle}>
         <Sidebar
           collapsed={leftPanelState === "collapsed"}
           datePreset={datePreset}
@@ -224,6 +243,11 @@ export function App() {
           onSessionChange={setSessionId}
         />
         <section className="main-workspace" aria-label="Image workspace">
+          <SidebarResizeHandle
+            {...sidebarResize.handleProps}
+            isResizing={sidebarResize.isResizing}
+            panelState={leftPanelState}
+          />
           <WorkspaceBar
             leftPanelState={leftPanelState}
             metaVisible={galleryMetaVisible}
