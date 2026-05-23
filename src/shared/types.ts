@@ -82,3 +82,64 @@ export interface RuntimeStatus {
 export interface ApiErrorResponse {
   error: string;
 }
+
+export type CapabilityKind = "skill" | "plugin" | "mcp" | "command" | "automation";
+export type CapabilitySource = "user" | "system" | "plugin" | "project" | "runtime";
+export type CapabilityStatus = "enabled" | "disabled" | "warning" | "unknown";
+export type CapabilityIssueSeverity = "info" | "warning" | "error";
+export type CapabilityDependencyKind =
+  | "agents"
+  | "app"
+  | "assets"
+  | "commands"
+  | "config"
+  | "mcp"
+  | "references"
+  | "scripts"
+  | "skills"
+  | "workspace";
+
+export interface CapabilityIssue {
+  code: string;
+  message: string;
+  severity: CapabilityIssueSeverity;
+}
+
+export interface CapabilityDependency {
+  count?: number;
+  kind: CapabilityDependencyKind;
+  label: string;
+  path?: string;
+  status: "available" | "missing" | "unknown";
+}
+
+export interface CapabilityRecord {
+  id: string;
+  name: string;
+  kind: CapabilityKind;
+  source: CapabilitySource;
+  status: CapabilityStatus;
+  description: string | null;
+  path: string | null;
+  origin: string;
+  trigger: string | null;
+  updatedAt: string | null;
+  issues: CapabilityIssue[];
+  dependencies: CapabilityDependency[];
+  metadata: Record<string, string>;
+}
+
+export interface CapabilitySummary {
+  total: number;
+  issueCount: number;
+  byKind: Record<CapabilityKind, number>;
+  bySource: Record<CapabilitySource, number>;
+  byStatus: Record<CapabilityStatus, number>;
+}
+
+export interface CapabilityScanResult {
+  items: CapabilityRecord[];
+  issues: CapabilityIssue[];
+  scannedAt: string;
+  summary: CapabilitySummary;
+}

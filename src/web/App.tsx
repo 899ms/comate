@@ -1,7 +1,24 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
-import type { DatePreset, ImageRecord, ImageSearchResult, PromptState, RuntimeStatus } from "../shared/types.js";
-import { fetchImages, fetchRuntimeStatus, reindexLibrary } from "./api/client.js";
+import type {
+  CapabilityRecord,
+  CapabilityScanResult,
+  DatePreset,
+  ImageRecord,
+  ImageSearchResult,
+  PromptState,
+  RuntimeStatus
+} from "../shared/types.js";
+import {
+  fetchCapabilities,
+  fetchImages,
+  fetchRuntimeStatus,
+  openCapabilityPath,
+  reindexLibrary,
+  rescanCapabilities
+} from "./api/client.js";
+import { CapabilityInspector } from "./components/CapabilityInspector.js";
+import { CapabilityWorkspace } from "./components/CapabilityWorkspace.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { GalleryPane } from "./components/GalleryPane.js";
 import { SearchOverlay } from "./components/SearchOverlay.js";
@@ -10,6 +27,8 @@ import { SidebarResizeHandle } from "./components/SidebarResizeHandle.js";
 import { StartupScreen, type StartupScreenMode } from "./components/StartupScreen.js";
 import { WorkspaceBar } from "./components/WorkspaceBar.js";
 import { getSidebarWidthCssValue, SIDEBAR_WIDTH_CONFIG } from "./domain/sidebarResize.js";
+import { filterCapabilities, getSelectedCapability } from "./domain/capabilityView.js";
+import { type AppModule, type CapabilitySection, getModuleTitle } from "./domain/navigation.js";
 import {
   getImageWorkspaceHeader,
   getWorkspaceClassName,
@@ -39,6 +58,14 @@ export function App() {
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [result, setResult] = useState<ImageSearchResult>(EMPTY_RESULT);
   const [galleryMetaVisible, setGalleryMetaVisible] = useState(true);
+  const [activeModule, setActiveModule] = useState<AppModule>("gallery");
+  const [capabilitySection, setCapabilitySection] = useState<CapabilitySection>("overview");
+  const [capabilities, setCapabilities] = useState<CapabilityScanResult | null>(null);
+  const [capabilityQuery, setCapabilityQuery] = useState("");
+  const [capabilityLoading, setCapabilityLoading] = useState(false);
+  const [capabilityRefreshing, setCapabilityRefreshing] = useState(false);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const [selectedCapabilityId, setSelectedCapabilityId] = useState<string | null>(null);
   const [leftPanelState, setLeftPanelState] = useState<WorkspacePanelState>("expanded");
   const [leftPanelWidth, setLeftPanelWidth] = useState(SIDEBAR_WIDTH_CONFIG.defaultWidth);
   const [rightPanelState, setRightPanelState] = useState<WorkspacePanelState>("expanded");
@@ -92,6 +119,33 @@ export function App() {
 
     return () => window.clearTimeout(timer);
   }, [runtimeStatus]);
+
+  useEffect(() => {
+    if (activeModule !== "capabilities" || capabilities) {
+      return;
+    }
+
+    const controller = new AbortController();
+    setCapabilityLoading(true);
+    setCapabilityError(null);
+    fetchCapabilities(controller.signal)
+      .then((nextCapabilities) => {
+        setCapabilities(nextCapabilities);
+        setSelectedCapabilityId((current) => current ?? nextCapabilities.items[0]?.id ?? null);
+      })
+      .catch((nextError) => {
+        if (nextError.name !== "AbortError") {
+          setCapabilityError(nextError instanceof Error ? nextError.message : "Unable to scan Codex capabilities.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setCapabilityLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [activeModule, capabilities]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedQuery(query), 180);
@@ -160,6 +214,28 @@ export function App() {
       }),
     [datePreset, loading, promptState, query, result.total, selectedImage, sessionId]
   );
+  const visibleCapabilities = useMemo(
+    () => filterCapabilities(capabilities, capabilitySection, capabilityQuery),
+    [capabilities, capabilityQuery, capabilitySection]
+  );
+  const selectedCapability = useMemo(
+    () => getSelectedCapability(visibleCapabilities, selectedCapabilityId),
+    [selectedCapabilityId, visibleCapabilities]
+  );
+  useEffect(() => {
+    if (activeModule !== "capabilities") {
+      return;
+    }
+
+    if (!selectedCapability) {
+      setSelectedCapabilityId(null);
+      return;
+    }
+
+    if (selectedCapability.id !== selectedCapabilityId) {
+      setSelectedCapabilityId(selectedCapability.id);
+    }
+  }, [activeModule, selectedCapability, selectedCapabilityId]);
   const sidebarResize = useSidebarResize({
     panelState: leftPanelState,
     width: leftPanelWidth,
@@ -200,6 +276,25 @@ export function App() {
     }
   }
 
+  async function handleCapabilityRescan(): Promise<void> {
+    setCapabilityRefreshing(true);
+    setCapabilityError(null);
+    try {
+      const nextCapabilities = await rescanCapabilities();
+      setCapabilities(nextCapabilities);
+      setSelectedCapabilityId((current) => {
+        if (current && nextCapabilities.items.some((item) => item.id === current)) {
+          return current;
+        }
+        return nextCapabilities.items[0]?.id ?? null;
+      });
+    } catch (nextError) {
+      setCapabilityError(nextError instanceof Error ? nextError.message : "Capability scan failed.");
+    } finally {
+      setCapabilityRefreshing(false);
+    }
+  }
+
   async function handleStartupRetry(): Promise<void> {
     setStatusError(null);
     void reindexLibrary()
@@ -220,6 +315,16 @@ export function App() {
     setSelectedId(image.id);
   }
 
+  function selectCapability(capability: CapabilityRecord): void {
+    setSelectedCapabilityId(capability.id);
+  }
+
+  function handleCapabilityOpen(filePath: string, action: "openFile" | "revealFile"): void {
+    openCapabilityPath(filePath, action).catch((nextError) => {
+      setCapabilityError(nextError instanceof Error ? nextError.message : "Unable to open capability path.");
+    });
+  }
+
   const startupMode = getStartupMode(runtimeStatus, statusError);
   if (startupMode) {
     return <StartupScreen mode={startupMode} status={runtimeStatus} error={statusError} onRetry={handleStartupRetry} />;
@@ -231,6 +336,9 @@ export function App() {
 
       <div className={workspaceClassName} style={workspaceStyle}>
         <Sidebar
+          activeModule={activeModule}
+          capabilitySection={capabilitySection}
+          capabilitySummary={capabilities?.summary ?? null}
           collapsed={leftPanelState === "collapsed"}
           datePreset={datePreset}
           imageTotal={result.total}
@@ -238,11 +346,13 @@ export function App() {
           promptState={promptState}
           sessionId={sessionId}
           sessions={result.facets.sessions}
+          onActiveModuleChange={setActiveModule}
+          onCapabilitySectionChange={setCapabilitySection}
           onDatePresetChange={setDatePreset}
           onPromptStateChange={setPromptState}
           onSessionChange={setSessionId}
         />
-        <section className="main-workspace" aria-label="Image workspace">
+        <section className="main-workspace" aria-label={activeModule === "gallery" ? "Image workspace" : "Capability workspace"}>
           <SidebarResizeHandle
             {...sidebarResize.handleProps}
             isResizing={sidebarResize.isResizing}
@@ -251,37 +361,64 @@ export function App() {
           <WorkspaceBar
             leftPanelState={leftPanelState}
             metaVisible={galleryMetaVisible}
-            refreshing={refreshing}
+            metaToggleVisible={activeModule === "gallery"}
+            moreVisible={activeModule === "gallery"}
+            refreshing={activeModule === "gallery" ? refreshing : capabilityRefreshing}
+            refreshLabel={activeModule === "gallery" ? "Refresh library" : "Rescan capabilities"}
             rightPanelState={rightPanelState}
-            title={workspaceHeader.title}
-            onMetaVisibleChange={setGalleryMetaVisible}
-            onRefresh={handleRefresh}
-            onSearchOpen={() => setSearchOpen(true)}
+            searchVisible={activeModule === "gallery"}
+            title={activeModule === "gallery" ? workspaceHeader.title : getModuleTitle(activeModule)}
+            onMetaVisibleChange={activeModule === "gallery" ? setGalleryMetaVisible : undefined}
+            onRefresh={activeModule === "gallery" ? handleRefresh : handleCapabilityRescan}
+            onSearchOpen={() => activeModule === "gallery" && setSearchOpen(true)}
             onToggleLeftPanel={() => setLeftPanelState((current) => togglePanelState(current))}
             onToggleRightPanel={() => setRightPanelState((current) => togglePanelState(current))}
           />
-          <GalleryPane
-            images={result.items}
-            loading={loading}
-            metaVisible={galleryMetaVisible}
-            selectedId={selectedId}
-            onSelect={selectImage}
-          />
+          {activeModule === "gallery" ? (
+            <GalleryPane
+              images={result.items}
+              loading={loading}
+              metaVisible={galleryMetaVisible}
+              selectedId={selectedId}
+              onSelect={selectImage}
+            />
+          ) : (
+            <CapabilityWorkspace
+              capabilities={capabilities}
+              error={capabilityError}
+              loading={capabilityLoading}
+              query={capabilityQuery}
+              section={capabilitySection}
+              selectedId={selectedCapability?.id ?? null}
+              onQueryChange={setCapabilityQuery}
+              onSelect={selectCapability}
+            />
+          )}
         </section>
-        <DetailPanel collapsed={rightPanelState === "collapsed"} image={selectedImage} />
+        {activeModule === "gallery" ? (
+          <DetailPanel collapsed={rightPanelState === "collapsed"} image={selectedImage} />
+        ) : (
+          <CapabilityInspector
+            collapsed={rightPanelState === "collapsed"}
+            capability={selectedCapability}
+            onOpenPath={handleCapabilityOpen}
+          />
+        )}
       </div>
 
-      <SearchOverlay
-        images={result.items}
-        loading={loading}
-        open={searchOpen}
-        query={query}
-        selectedId={selectedId}
-        total={result.total}
-        onOpenChange={setSearchOpen}
-        onQueryChange={setQuery}
-        onSelectImage={selectImage}
-      />
+      {activeModule === "gallery" ? (
+        <SearchOverlay
+          images={result.items}
+          loading={loading}
+          open={searchOpen}
+          query={query}
+          selectedId={selectedId}
+          total={result.total}
+          onOpenChange={setSearchOpen}
+          onQueryChange={setQuery}
+          onSelectImage={selectImage}
+        />
+      ) : null}
     </div>
   );
 }

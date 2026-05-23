@@ -1,4 +1,11 @@
-import type { ImageRecord, ImageSearchParams, ImageSearchResult, ReindexResult, RuntimeStatus } from "../../shared/types.js";
+import type {
+  CapabilityScanResult,
+  ImageRecord,
+  ImageSearchParams,
+  ImageSearchResult,
+  ReindexResult,
+  RuntimeStatus
+} from "../../shared/types.js";
 
 export async function fetchRuntimeStatus(signal?: AbortSignal): Promise<RuntimeStatus> {
   const response = await fetch("/api/status", { signal });
@@ -23,6 +30,16 @@ export async function reindexLibrary(): Promise<ReindexResult> {
   return readJson<ReindexResult>(response);
 }
 
+export async function fetchCapabilities(signal?: AbortSignal): Promise<CapabilityScanResult> {
+  const response = await fetch("/api/capabilities", { signal });
+  return readJson<CapabilityScanResult>(response);
+}
+
+export async function rescanCapabilities(): Promise<CapabilityScanResult> {
+  const response = await fetch("/api/capabilities/rescan", { method: "POST" });
+  return readJson<CapabilityScanResult>(response);
+}
+
 export async function openImage(id: string, action: "openFile" | "revealFile"): Promise<void> {
   const response = await fetch(`/api/images/${encodeURIComponent(id)}/open`, {
     method: "POST",
@@ -30,6 +47,18 @@ export async function openImage(id: string, action: "openFile" | "revealFile"): 
       "content-type": "application/json"
     },
     body: JSON.stringify({ action })
+  });
+
+  await readJson(response);
+}
+
+export async function openCapabilityPath(filePath: string, action: "openFile" | "revealFile"): Promise<void> {
+  const response = await fetch("/api/capabilities/open", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ action, path: filePath })
   });
 
   await readJson(response);

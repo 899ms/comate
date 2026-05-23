@@ -6,14 +6,18 @@ import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import type { CapabilityRecord, CapabilityScanResult } from "../src/shared/types.js";
 import { LibraryService } from "../src/server/application/libraryService.js";
 import { startCoMateRuntime } from "../src/server/application/serverRuntime.js";
 import { detectCodexDesktopData } from "../src/server/infrastructure/codexDesktopDetector.js";
+import { CodexCapabilityScanner } from "../src/server/infrastructure/codexCapabilityScanner.js";
 import { CodexImageScanner } from "../src/server/infrastructure/codexImageScanner.js";
 import { CodexSessionRepository } from "../src/server/infrastructure/codexSessionRepository.js";
 import { SqliteImageIndex } from "../src/server/infrastructure/sqliteImageIndex.js";
 import { findAvailablePort } from "../src/desktop/utils/port.js";
 import { waitForHttp } from "../src/desktop/utils/waitForHttp.js";
+import { CapabilityInspector } from "../src/web/components/CapabilityInspector.js";
+import { CapabilityWorkspace } from "../src/web/components/CapabilityWorkspace.js";
 import { DetailPanel } from "../src/web/components/DetailPanel.js";
 import { GalleryPane } from "../src/web/components/GalleryPane.js";
 import { SearchOverlay } from "../src/web/components/SearchOverlay.js";
@@ -27,6 +31,7 @@ import {
   getSidebarWidthCssValue,
   SIDEBAR_WIDTH_CONFIG
 } from "../src/web/domain/sidebarResize.js";
+import { filterCapabilities, getCapabilityMenuCount, getSelectedCapability } from "../src/web/domain/capabilityView.js";
 import {
   getImageWorkspaceHeader,
   getWorkspaceClassName,
@@ -43,10 +48,14 @@ async function main(): Promise<void> {
     console.log("ok codex-desktop/detection");
     await testScannerSessionMergeAndIndex(root);
     console.log("ok scanner/session/index");
+    await testCapabilityScanner(root);
+    console.log("ok scanner/capabilities");
     testSearchUiRendering();
     console.log("ok web/search-ui");
     testWorkspaceLayoutModel();
     console.log("ok web/workspace-layout");
+    testCapabilityViewModel();
+    console.log("ok web/capability-view");
     testSidebarResizeModel();
     console.log("ok web/sidebar-resize");
     testSidebarResizeHandleRendering();
@@ -57,6 +66,8 @@ async function main(): Promise<void> {
     console.log("ok web/startup-screen");
     testGalleryViewRendering();
     console.log("ok web/gallery-view");
+    testCapabilityViewRendering();
+    console.log("ok web/capability-ui");
     await testEmbeddedRuntime(root);
     console.log("ok desktop/runtime");
   } finally {
@@ -209,6 +220,118 @@ async function testScannerSessionMergeAndIndex(root: string): Promise<void> {
   }
 }
 
+async function testCapabilityScanner(root: string): Promise<void> {
+  const codexRoot = path.join(root, ".codex-capabilities");
+  const projectRoot = path.join(root, "project");
+  const userSkillDir = path.join(codexRoot, "skills", "draft-skill");
+  const duplicateSkillDir = path.join(codexRoot, "skills", "draft-skill-copy");
+  const pluginRoot = path.join(codexRoot, "plugins", "cache", "openai-curated", "build-web-apps", "6188456f");
+  const pluginManifestDir = path.join(pluginRoot, ".codex-plugin");
+  const pluginCommandDir = path.join(pluginRoot, "commands");
+  const automationDir = path.join(codexRoot, "automations", "daily-run");
+
+  await fs.mkdir(path.join(userSkillDir, "scripts"), { recursive: true });
+  await fs.mkdir(duplicateSkillDir, { recursive: true });
+  await fs.mkdir(pluginManifestDir, { recursive: true });
+  await fs.mkdir(pluginCommandDir, { recursive: true });
+  await fs.mkdir(automationDir, { recursive: true });
+  await fs.mkdir(path.join(projectRoot, ".codex", "commands"), { recursive: true });
+
+  await fs.writeFile(
+    path.join(userSkillDir, "SKILL.md"),
+    [
+      "---",
+      "name: draft-skill",
+      "description: Draft structured release notes when the user asks for a concise changelog.",
+      "---",
+      "# Draft Skill"
+    ].join("\n")
+  );
+  await fs.writeFile(
+    path.join(userSkillDir, "scripts", "run.js"),
+    "console.log('ok')\n"
+  );
+  await fs.writeFile(
+    path.join(duplicateSkillDir, "SKILL.md"),
+    [
+      "---",
+      "name: draft-skill",
+      "description: Another draft skill with the same name.",
+      "---"
+    ].join("\n")
+  );
+  await fs.writeFile(
+    path.join(pluginManifestDir, "plugin.json"),
+    JSON.stringify({
+      name: "build-web-apps",
+      version: "0.1.0",
+      description: "Build web apps.",
+      interface: {
+        category: "Coding",
+        displayName: "Build Web Apps",
+        shortDescription: "Build frontend-focused web apps."
+      }
+    })
+  );
+  await fs.writeFile(path.join(pluginCommandDir, "test-web-app.md"), "# Test web app\nRun browser checks.");
+  await fs.writeFile(
+    path.join(projectRoot, ".codex", "commands", "ship.md"),
+    "# Ship\nPrepare the current change for review."
+  );
+  await fs.writeFile(
+    path.join(automationDir, "automation.toml"),
+    [
+      'id = "daily-run"',
+      'kind = "cron"',
+      'name = "Daily Run"',
+      'prompt = "Run one daily check."',
+      'status = "PAUSED"',
+      'rrule = "RRULE:FREQ=DAILY"'
+    ].join("\n")
+  );
+  await fs.writeFile(
+    path.join(codexRoot, "config.toml"),
+    ['[plugins."build-web-apps@openai-curated"]', "enabled = true"].join("\n")
+  );
+
+  const scanner = new CodexCapabilityScanner({
+    codexRoot,
+    projectRoot,
+    readMcpList: async () =>
+      [
+        "Name      Command    Args    Env    Cwd    Status   Auth",
+        "browser   node       -       -      -      enabled  Unsupported"
+      ].join("\n")
+  });
+  const result = await scanner.scan();
+
+  assert.equal(result.summary.byKind.skill, 2);
+  assert.equal(result.summary.byKind.plugin, 1);
+  assert.equal(result.summary.byKind.command, 2);
+  assert.equal(result.summary.byKind.automation, 1);
+  assert.equal(result.summary.byKind.mcp, 1);
+  assert.ok(result.summary.issueCount >= 3);
+
+  const duplicateSkill = result.items.find((item) => item.kind === "skill" && item.name === "draft-skill");
+  assert.equal(duplicateSkill?.source, "user");
+  assert.ok(duplicateSkill?.issues.some((issue) => issue.code === "duplicate-capability-name"));
+  assert.ok(duplicateSkill?.dependencies.some((dependency) => dependency.kind === "scripts" && dependency.count === 1));
+
+  const plugin = result.items.find((item) => item.kind === "plugin" && item.name === "Build Web Apps");
+  assert.equal(plugin?.status, "enabled");
+  assert.equal(plugin?.metadata.id, "build-web-apps@openai-curated");
+
+  const projectCommand = result.items.find((item) => item.kind === "command" && item.name === "ship");
+  assert.equal(projectCommand?.source, "project");
+  assert.equal(projectCommand?.trigger, "/ship");
+
+  const automation = result.items.find((item) => item.kind === "automation" && item.name === "Daily Run");
+  assert.equal(automation?.status, "disabled");
+
+  const mcp = result.items.find((item) => item.kind === "mcp" && item.name === "browser");
+  assert.equal(mcp?.status, "enabled");
+}
+
 function testSearchUiRendering(): void {
   const noop = () => undefined;
   const image = {
@@ -264,6 +387,9 @@ function testSearchUiRendering(): void {
 
   const sidebarMarkup = renderToStaticMarkup(
     createElement(Sidebar, {
+      activeModule: "gallery",
+      capabilitySection: "overview",
+      capabilitySummary: null,
       collapsed: false,
       datePreset: "all",
       imageTotal: 42,
@@ -271,6 +397,8 @@ function testSearchUiRendering(): void {
       promptState: "all",
       sessionId: undefined,
       sessions: [{ sessionId: "session-a", threadName: "Design notes", count: 3 }],
+      onActiveModuleChange: noop,
+      onCapabilitySectionChange: noop,
       onDatePresetChange: noop,
       onPromptStateChange: noop,
       onSessionChange: noop
@@ -297,6 +425,9 @@ function testSearchUiRendering(): void {
 
   const collapsedSidebarMarkup = renderToStaticMarkup(
     createElement(Sidebar, {
+      activeModule: "gallery",
+      capabilitySection: "overview",
+      capabilitySummary: null,
       collapsed: true,
       datePreset: "all",
       imageTotal: 42,
@@ -304,6 +435,8 @@ function testSearchUiRendering(): void {
       promptState: "all",
       sessionId: undefined,
       sessions: [],
+      onActiveModuleChange: noop,
+      onCapabilitySectionChange: noop,
       onDatePresetChange: noop,
       onPromptStateChange: noop,
       onSessionChange: noop
@@ -375,6 +508,18 @@ function testWorkspaceLayoutModel(): void {
   });
   assert.equal(fallbackHeader.title, "图片浏览");
   assert.match(fallbackHeader.context, /Loading/);
+}
+
+function testCapabilityViewModel(): void {
+  const graph = createCapabilityGraph();
+  assert.equal(filterCapabilities(graph, "overview", "").length, 3);
+  assert.equal(filterCapabilities(graph, "skills", "").length, 1);
+  assert.equal(filterCapabilities(graph, "issues", "").length, 1);
+  assert.equal(filterCapabilities(graph, "overview", "browser").length, 1);
+  assert.equal(getCapabilityMenuCount(graph.summary, "plugins"), 1);
+  assert.equal(getCapabilityMenuCount(graph.summary, "issues"), 1);
+  assert.equal(getSelectedCapability(graph.items, null)?.name, "imagegen");
+  assert.equal(getSelectedCapability(graph.items, "plugin-browser")?.name, "Browser");
 }
 
 function testSidebarResizeModel(): void {
@@ -560,6 +705,140 @@ function testGalleryViewRendering(): void {
   );
   assert.match(cleanMarkup, /gallery gallery-clean/);
   assert.equal(cleanMarkup.includes('class="tile-meta"'), false);
+}
+
+function testCapabilityViewRendering(): void {
+  const noop = () => undefined;
+  const graph = createCapabilityGraph();
+
+  const sidebarMarkup = renderToStaticMarkup(
+    createElement(Sidebar, {
+      activeModule: "capabilities",
+      capabilitySection: "skills",
+      capabilitySummary: graph.summary,
+      collapsed: false,
+      datePreset: "all",
+      imageTotal: 0,
+      loading: false,
+      promptState: "all",
+      sessionId: undefined,
+      sessions: [],
+      onActiveModuleChange: noop,
+      onCapabilitySectionChange: noop,
+      onDatePresetChange: noop,
+      onPromptStateChange: noop,
+      onSessionChange: noop
+    })
+  );
+  assert.match(sidebarMarkup, /能力图谱/);
+  assert.match(sidebarMarkup, />Skills</);
+  assert.match(sidebarMarkup, /capability-sidebar-note/);
+  assert.equal(sidebarMarkup.includes(">Sessions<"), false);
+
+  const workspaceMarkup = renderToStaticMarkup(
+    createElement(CapabilityWorkspace, {
+      capabilities: graph,
+      error: null,
+      loading: false,
+      query: "",
+      section: "overview",
+      selectedId: "skill-imagegen",
+      onQueryChange: noop,
+      onSelect: noop
+    })
+  );
+  assert.match(workspaceMarkup, /class="capability-workspace"/);
+  assert.match(workspaceMarkup, />Skills</);
+  assert.match(workspaceMarkup, /imagegen/);
+  assert.match(workspaceMarkup, /Browser/);
+  assert.match(workspaceMarkup, /status-warning/);
+
+  const inspectorMarkup = renderToStaticMarkup(
+    createElement(CapabilityInspector, {
+      capability: graph.items[0],
+      collapsed: false,
+      onOpenPath: noop
+    })
+  );
+  assert.match(inspectorMarkup, /capability-inspector/);
+  assert.match(inspectorMarkup, /打开文件/);
+  assert.match(inspectorMarkup, /Dependencies/);
+  assert.match(inspectorMarkup, /Issues/);
+}
+
+function createCapabilityGraph(): CapabilityScanResult {
+  const skill = createCapability({
+    id: "skill-imagegen",
+    name: "imagegen",
+    kind: "skill",
+    source: "user",
+    status: "warning",
+    issues: [{ code: "skill-description-long", message: "description is long", severity: "warning" }],
+    dependencies: [{ kind: "scripts", label: "Scripts", path: "/tmp/scripts", status: "available", count: 2 }]
+  });
+  const plugin = createCapability({
+    id: "plugin-browser",
+    name: "Browser",
+    kind: "plugin",
+    source: "plugin",
+    status: "enabled"
+  });
+  const automation = createCapability({
+    id: "automation-lumi",
+    name: "lumi-task",
+    kind: "automation",
+    source: "user",
+    status: "disabled"
+  });
+
+  return {
+    items: [skill, plugin, automation],
+    issues: [],
+    scannedAt: "2026-05-23T00:00:00.000Z",
+    summary: {
+      total: 3,
+      issueCount: 1,
+      byKind: {
+        automation: 1,
+        command: 0,
+        mcp: 0,
+        plugin: 1,
+        skill: 1
+      },
+      bySource: {
+        plugin: 1,
+        project: 0,
+        runtime: 0,
+        system: 0,
+        user: 2
+      },
+      byStatus: {
+        disabled: 1,
+        enabled: 1,
+        unknown: 0,
+        warning: 1
+      }
+    }
+  };
+}
+
+function createCapability(overrides: Partial<CapabilityRecord>): CapabilityRecord {
+  return {
+    id: "capability",
+    name: "Capability",
+    kind: "skill",
+    source: "user",
+    status: "enabled",
+    description: "Capability description",
+    path: "/tmp/capability/SKILL.md",
+    origin: "skills",
+    trigger: "Capability trigger",
+    updatedAt: "2026-05-23T00:00:00.000Z",
+    issues: [],
+    dependencies: [],
+    metadata: {},
+    ...overrides
+  };
 }
 
 async function testEmbeddedRuntime(root: string): Promise<void> {

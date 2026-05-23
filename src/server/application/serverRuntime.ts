@@ -4,6 +4,7 @@ import { createCoMateServer } from "../api/httpServer.js";
 import { resolveCodexPaths } from "../config/paths.js";
 import type { CodexPaths } from "../domain/types.js";
 import { detectCodexDesktopData } from "../infrastructure/codexDesktopDetector.js";
+import { CodexCapabilityScanner } from "../infrastructure/codexCapabilityScanner.js";
 import { CodexImageScanner } from "../infrastructure/codexImageScanner.js";
 import { CodexSessionRepository } from "../infrastructure/codexSessionRepository.js";
 import { FileLauncher } from "../infrastructure/fileLauncher.js";
@@ -41,6 +42,7 @@ export async function startCoMateRuntime(options: StartCoMateRuntimeOptions): Pr
   try {
     const initialIndex = indexing.startInitialIndex();
     const server = createCoMateServer({
+      capabilities: new CodexCapabilityScanner({ codexRoot: codexPaths.codexRoot, projectRoot: process.cwd() }),
       codexPaths,
       index,
       indexing,

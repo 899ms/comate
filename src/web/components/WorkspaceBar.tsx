@@ -15,10 +15,14 @@ import type { WorkspacePanelState } from "../domain/workspaceLayout.js";
 interface WorkspaceBarProps {
   leftPanelState: WorkspacePanelState;
   metaVisible: boolean;
+  metaToggleVisible?: boolean;
+  moreVisible?: boolean;
   refreshing: boolean;
+  refreshLabel?: string;
   rightPanelState: WorkspacePanelState;
+  searchVisible?: boolean;
   title: string;
-  onMetaVisibleChange: (visible: boolean) => void;
+  onMetaVisibleChange?: (visible: boolean) => void;
   onRefresh: () => void;
   onSearchOpen: () => void;
   onToggleLeftPanel: () => void;
@@ -28,8 +32,12 @@ interface WorkspaceBarProps {
 export function WorkspaceBar({
   leftPanelState,
   metaVisible,
+  metaToggleVisible = true,
+  moreVisible = true,
   refreshing,
+  refreshLabel = "Refresh library",
   rightPanelState,
+  searchVisible = true,
   title,
   onMetaVisibleChange,
   onRefresh,
@@ -63,38 +71,44 @@ export function WorkspaceBar({
       </div>
 
       <div className="workspace-actions" aria-label="Workspace actions">
-        <button
-          className="workspace-search-button"
-          type="button"
-          onClick={onSearchOpen}
-          aria-label="Search workspace"
-        >
-          <Search size={14} aria-hidden="true" />
-          <span>Search</span>
-        </button>
-        <button
-          className="workspace-tool-button workspace-detail-toggle"
-          type="button"
-          onClick={() => onMetaVisibleChange(!metaVisible)}
-          title={metaVisible ? "Hide grid details" : "Show grid details"}
-          aria-label={metaVisible ? "Hide grid details" : "Show grid details"}
-          aria-pressed={metaVisible}
-        >
-          {metaVisible ? <Captions size={15} aria-hidden="true" /> : <CaptionsOff size={15} aria-hidden="true" />}
-        </button>
+        {searchVisible ? (
+          <button
+            className="workspace-search-button"
+            type="button"
+            onClick={onSearchOpen}
+            aria-label="Search workspace"
+          >
+            <Search size={14} aria-hidden="true" />
+            <span>Search</span>
+          </button>
+        ) : null}
+        {metaToggleVisible && onMetaVisibleChange ? (
+          <button
+            className="workspace-tool-button workspace-detail-toggle"
+            type="button"
+            onClick={() => onMetaVisibleChange(!metaVisible)}
+            title={metaVisible ? "Hide grid details" : "Show grid details"}
+            aria-label={metaVisible ? "Hide grid details" : "Show grid details"}
+            aria-pressed={metaVisible}
+          >
+            {metaVisible ? <Captions size={15} aria-hidden="true" /> : <CaptionsOff size={15} aria-hidden="true" />}
+          </button>
+        ) : null}
         <button
           className="workspace-tool-button"
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          title="Refresh library"
-          aria-label="Refresh library"
+          title={refreshLabel}
+          aria-label={refreshLabel}
         >
           <RefreshCcw size={15} aria-hidden="true" className={refreshing ? "spin" : undefined} />
         </button>
-        <button className="workspace-tool-button" type="button" title="More actions" aria-label="More actions">
-          <MoreHorizontal size={15} aria-hidden="true" />
-        </button>
+        {moreVisible ? (
+          <button className="workspace-tool-button" type="button" title="More actions" aria-label="More actions">
+            <MoreHorizontal size={15} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
 
       <button
