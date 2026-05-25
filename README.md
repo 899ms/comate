@@ -55,6 +55,26 @@ COMATE_DB=/path/to/comate.sqlite
 npm install
 ```
 
+## Run Locally Without the Desktop App
+
+You can use CoMate directly from source without installing the Electron app:
+
+```bash
+npm run start:local
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4388
+```
+
+`4388` is the default local web port. If that port is already in use, choose another one:
+
+```bash
+COMATE_WEB_PORT=4392 npm run start:local
+```
+
 ## Development
 
 Run the web UI and API in development mode:
@@ -67,6 +87,8 @@ Default development URLs:
 
 - Web UI: `http://127.0.0.1:4388`
 - API: `http://127.0.0.1:4389`
+
+Development mode uses Vite for the web UI and a separate API process. If the web port is occupied, Vite may print a different temporary URL; the production local command above keeps CoMate on a single `COMATE_WEB_PORT`.
 
 ## Desktop App
 
@@ -89,8 +111,7 @@ Unsigned macOS builds are also produced by the **Package macOS App** GitHub Acti
 ## Production Web Mode
 
 ```bash
-npm run build
-npm start
+npm run start:local
 ```
 
 ## Test

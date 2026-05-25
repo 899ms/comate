@@ -25,6 +25,7 @@
     "build:desktop": "tsc -p tsconfig.desktop.json",
     "desktop": "npm run build && electron .",
     "package:mac": "npm run build && electron-builder --mac --publish never",
+    "start:local": "npm run build && npm start",
     "start": "NODE_OPTIONS=--no-warnings node dist-server/server/index.js",
     "test": "NODE_OPTIONS=--no-warnings tsx tests/run-unit-tests.ts"
   },

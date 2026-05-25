@@ -55,6 +55,26 @@ COMATE_DB=/path/to/comate.sqlite
 npm install
 ```
 
+## 不安装桌面 App，直接本地启动
+
+也可以不使用 Electron 桌面版，直接从源码启动本地 Web 服务：
+
+```bash
+npm run start:local
+```
+
+然后打开：
+
+```text
+http://127.0.0.1:4388
+```
+
+`4388` 是默认本地 Web 端口。如果这个端口已经被占用，可以换一个端口：
+
+```bash
+COMATE_WEB_PORT=4392 npm run start:local
+```
+
 ## 开发模式
 
 启动 Web UI 和 API：
@@ -67,6 +87,8 @@ npm run dev
 
 - Web UI: `http://127.0.0.1:4388`
 - API: `http://127.0.0.1:4389`
+
+开发模式会用 Vite 启动 Web UI，并单独启动 API 进程。如果 Web 端口被占用，Vite 可能会打印一个临时顺延端口；上面的生产本地启动命令会使用单一的 `COMATE_WEB_PORT`。
 
 ## 桌面应用
 
@@ -89,8 +111,7 @@ GitHub Actions 里的 **Package macOS App** workflow 也可以构建未签名的
 ## Web 生产模式
 
 ```bash
-npm run build
-npm start
+npm run start:local
 ```
 
 ## 测试
