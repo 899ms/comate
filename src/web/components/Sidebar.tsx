@@ -1,16 +1,9 @@
 import { useState } from "react";
 import { CalendarDays, ChevronDown, Clock3, Image as ImageIcon, MessageSquareText } from "lucide-react";
 
-import type { CapabilitySummary, DatePreset, PromptState, SessionFacet } from "../../shared/types.js";
+import type { CapabilitySummary, DatePreset, ImageSearchResult, PromptState, SessionFacet } from "../../shared/types.js";
 import { getCapabilityMenuCount } from "../domain/capabilityView.js";
-import {
-  CAPABILITY_MENU_ITEMS,
-  GLOBAL_MODULES,
-  type AppModule,
-  type CapabilitySection
-} from "../domain/navigation.js";
-
-const comateIconUrl = new URL("../../../assets/comate-icon.svg", import.meta.url).href;
+import { CAPABILITY_MENU_ITEMS, type AppModule, type CapabilitySection, getModuleTitle } from "../domain/navigation.js";
 
 interface SidebarProps {
   activeModule: AppModule;
@@ -18,12 +11,10 @@ interface SidebarProps {
   capabilitySummary: CapabilitySummary | null;
   collapsed: boolean;
   datePreset: DatePreset;
-  imageTotal: number;
-  loading: boolean;
+  imageFacets: ImageSearchResult["facets"];
   promptState: PromptState;
   sessionId: string | undefined;
   sessions: SessionFacet[];
-  onActiveModuleChange: (value: AppModule) => void;
   onCapabilitySectionChange: (value: CapabilitySection) => void;
   onDatePresetChange: (value: DatePreset) => void;
   onPromptStateChange: (value: PromptState) => void;
@@ -43,12 +34,10 @@ export function Sidebar({
   capabilitySummary,
   collapsed,
   datePreset,
-  imageTotal,
-  loading,
+  imageFacets,
   promptState,
   sessionId,
   sessions,
-  onActiveModuleChange,
   onCapabilitySectionChange,
   onDatePresetChange,
   onPromptStateChange,
@@ -67,68 +56,19 @@ export function Sidebar({
   };
 
   if (collapsed) {
-    return (
-      <aside className="sidebar collapsed" aria-label="CoMate navigation">
-        <div className="rail-brand" title="CoMate">
-          <img src={comateIconUrl} alt="CoMate" />
-        </div>
-        <nav className="rail-nav" aria-label="Global modules">
-          {GLOBAL_MODULES.map((module) => {
-            const Icon = module.icon;
-            return (
-              <button
-                key={module.id}
-                className={activeModule === module.id ? "rail-button active" : "rail-button"}
-                type="button"
-                onClick={() => onActiveModuleChange(module.id)}
-                title={module.label}
-                aria-label={module.label}
-              >
-                <Icon size={18} aria-hidden="true" />
-              </button>
-            );
-          })}
-        </nav>
-        <div className="rail-total" title={getRailTotalTitle(activeModule, loading, imageTotal, capabilitySummary)}>
-          {getRailTotal(activeModule, loading, imageTotal, capabilitySummary)}
-        </div>
-      </aside>
-    );
+    return <aside className="sidebar collapsed" aria-label={`${getModuleTitle(activeModule)} filters`} aria-hidden="true" />;
   }
 
   return (
-    <aside className="sidebar" aria-label="CoMate navigation">
+    <aside className="sidebar" aria-label={`${getModuleTitle(activeModule)} filters`}>
       <div className="sidebar-fixed">
-        <div className="sidebar-brand">
-          <span className="brand-mark" aria-hidden="true">
-            <img src={comateIconUrl} alt="" />
-          </span>
-          <div className="brand-copy">
-            <span className="brand-name">CoMate</span>
-          </div>
-        </div>
-
-        <nav className="global-nav" aria-label="Global modules">
-          {GLOBAL_MODULES.map((module) => {
-            const Icon = module.icon;
-            return (
-              <button
-                key={module.id}
-                className={activeModule === module.id ? "global-nav-item active" : "global-nav-item"}
-                type="button"
-                onClick={() => onActiveModuleChange(module.id)}
-                title={module.description}
-                aria-current={activeModule === module.id ? "page" : undefined}
-              >
-                <Icon size={15} aria-hidden="true" />
-                <span>{module.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        <header className="sidebar-module-header">
+          <span>{getModuleTitle(activeModule)}</span>
+        </header>
 
         {activeModule === "gallery" ? (
           <GalleryMenu
+            imageFacets={imageFacets}
             promptState={promptState}
             isDateFilterActive={isDateFilterActive}
             onDatePresetChange={handleDatePresetChange}
@@ -182,11 +122,13 @@ export function Sidebar({
 }
 
 function GalleryMenu({
+  imageFacets,
   promptState,
   isDateFilterActive,
   onDatePresetChange,
   onPromptStateChange
 }: {
+  imageFacets: ImageSearchResult["facets"];
   promptState: PromptState;
   isDateFilterActive: (value: DatePreset) => boolean;
   onDatePresetChange: (value: DatePreset) => void;
@@ -203,6 +145,7 @@ function GalleryMenu({
           >
             {filter.value === "all" ? <ImageIcon size={16} /> : filter.value === "today" ? <Clock3 size={16} /> : <CalendarDays size={16} />}
             <span>{filter.label}</span>
+            <em>{getDateFilterCount(filter.value, imageFacets)}</em>
           </button>
         ))}
       </nav>
@@ -214,6 +157,7 @@ function GalleryMenu({
         >
           <MessageSquareText size={16} />
           <span>With prompt</span>
+          <em>{imageFacets.withPrompt}</em>
         </button>
         <button
           className={promptState === "withoutPrompt" ? "filter-item active" : "filter-item"}
@@ -221,6 +165,7 @@ function GalleryMenu({
         >
           <MessageSquareText size={16} />
           <span>No prompt</span>
+          <em>{imageFacets.withoutPrompt}</em>
         </button>
       </div>
     </>
@@ -257,26 +202,15 @@ function CapabilityMenu({
   );
 }
 
-function getRailTotal(
-  activeModule: AppModule,
-  loading: boolean,
-  imageTotal: number,
-  capabilitySummary: CapabilitySummary | null
-): string {
-  if (activeModule === "gallery") {
-    return loading ? "..." : String(imageTotal);
+function getDateFilterCount(value: DatePreset, imageFacets: ImageSearchResult["facets"]): number {
+  switch (value) {
+    case "today":
+      return imageFacets.today;
+    case "week":
+      return imageFacets.last7Days;
+    case "month":
+      return imageFacets.last30Days;
+    case "all":
+      return imageFacets.totalImages;
   }
-  return String(capabilitySummary?.issueCount ?? 0);
-}
-
-function getRailTotalTitle(
-  activeModule: AppModule,
-  loading: boolean,
-  imageTotal: number,
-  capabilitySummary: CapabilitySummary | null
-): string {
-  if (activeModule === "gallery") {
-    return loading ? "Loading" : `${imageTotal} images`;
-  }
-  return `${capabilitySummary?.issueCount ?? 0} capability issues`;
 }

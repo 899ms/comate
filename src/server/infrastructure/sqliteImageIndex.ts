@@ -231,12 +231,22 @@ export class SqliteImageIndex implements ImageIndexStore {
         `
         SELECT
           COUNT(*) as totalImages,
+          SUM(CASE WHEN datetime(COALESCE(generated_at, file_modified_at)) >= datetime(?) THEN 1 ELSE 0 END) as today,
+          SUM(CASE WHEN datetime(COALESCE(generated_at, file_modified_at)) >= datetime(?) THEN 1 ELSE 0 END) as last7Days,
+          SUM(CASE WHEN datetime(COALESCE(generated_at, file_modified_at)) >= datetime(?) THEN 1 ELSE 0 END) as last30Days,
           SUM(CASE WHEN has_prompt = 1 THEN 1 ELSE 0 END) as withPrompt,
           SUM(CASE WHEN has_prompt = 0 THEN 1 ELSE 0 END) as withoutPrompt
         FROM images
       `
       )
-      .get() as { totalImages: number; withPrompt: number | null; withoutPrompt: number | null };
+      .get(getDateThreshold("today"), getDateThreshold("week"), getDateThreshold("month")) as {
+      last30Days: number | null;
+      last7Days: number | null;
+      today: number | null;
+      totalImages: number;
+      withPrompt: number | null;
+      withoutPrompt: number | null;
+    };
 
     return {
       sessions: sessionRows.map(
@@ -246,6 +256,9 @@ export class SqliteImageIndex implements ImageIndexStore {
           count: row.count
         })
       ),
+      last30Days: counts.last30Days ?? 0,
+      last7Days: counts.last7Days ?? 0,
+      today: counts.today ?? 0,
       totalImages: counts.totalImages,
       withPrompt: counts.withPrompt ?? 0,
       withoutPrompt: counts.withoutPrompt ?? 0

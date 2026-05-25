@@ -6,7 +6,7 @@ import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { CapabilityRecord, CapabilityScanResult } from "../src/shared/types.js";
+import type { CapabilityRecord, CapabilityScanResult, ImageRecord, ImageSearchResult } from "../src/shared/types.js";
 import { LibraryService } from "../src/server/application/libraryService.js";
 import { startCoMateRuntime } from "../src/server/application/serverRuntime.js";
 import { detectCodexDesktopData } from "../src/server/infrastructure/codexDesktopDetector.js";
@@ -14,12 +14,24 @@ import { CodexCapabilityScanner } from "../src/server/infrastructure/codexCapabi
 import { CodexImageScanner } from "../src/server/infrastructure/codexImageScanner.js";
 import { CodexSessionRepository } from "../src/server/infrastructure/codexSessionRepository.js";
 import { SqliteImageIndex } from "../src/server/infrastructure/sqliteImageIndex.js";
+import { getNavigationDecision } from "../src/desktop/domain/navigationPolicy.js";
+import {
+  formatMissingDesktopStaticAssetsMessage,
+  getRequiredDesktopStaticAssets
+} from "../src/desktop/domain/staticAssets.js";
+import {
+  DESKTOP_WINDOW_CONFIG,
+  getInitialWindowBounds,
+  sanitizeWindowBounds,
+  toPersistedWindowBounds
+} from "../src/desktop/domain/windowState.js";
 import { findAvailablePort } from "../src/desktop/utils/port.js";
 import { waitForHttp } from "../src/desktop/utils/waitForHttp.js";
 import { CapabilityInspector } from "../src/web/components/CapabilityInspector.js";
 import { CapabilityWorkspace } from "../src/web/components/CapabilityWorkspace.js";
 import { DetailPanel } from "../src/web/components/DetailPanel.js";
 import { GalleryPane } from "../src/web/components/GalleryPane.js";
+import { GlobalRail } from "../src/web/components/GlobalRail.js";
 import { SearchOverlay } from "../src/web/components/SearchOverlay.js";
 import { Sidebar } from "../src/web/components/Sidebar.js";
 import { SidebarResizeHandle } from "../src/web/components/SidebarResizeHandle.js";
@@ -32,6 +44,11 @@ import {
   SIDEBAR_WIDTH_CONFIG
 } from "../src/web/domain/sidebarResize.js";
 import { filterCapabilities, getCapabilityMenuCount, getSelectedCapability } from "../src/web/domain/capabilityView.js";
+import {
+  copyImageBinaryToClipboard,
+  getClipboardImageMimeType,
+  shouldHandleImageCopyShortcut
+} from "../src/web/domain/imageClipboard.js";
 import {
   getImageWorkspaceHeader,
   getWorkspaceClassName,
@@ -62,6 +79,10 @@ async function main(): Promise<void> {
     console.log("ok web/sidebar-resize-handle");
     testWorkspaceBarRendering();
     console.log("ok web/workspace-bar");
+    await testImageClipboardModel();
+    console.log("ok web/image-clipboard");
+    testDesktopDomainModels();
+    console.log("ok desktop/domain");
     testStartupScreenRendering();
     console.log("ok web/startup-screen");
     testGalleryViewRendering();
@@ -73,6 +94,58 @@ async function main(): Promise<void> {
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
+}
+
+function testDesktopDomainModels(): void {
+  const appUrl = "http://127.0.0.1:4388/";
+  assert.deepEqual(getNavigationDecision("http://127.0.0.1:4388/api/health", appUrl), {
+    disposition: "allow-app",
+    reason: "same-origin-app",
+    url: "http://127.0.0.1:4388/api/health"
+  });
+  assert.deepEqual(getNavigationDecision("https://example.com/docs", appUrl), {
+    disposition: "open-external",
+    reason: "external-safe-protocol",
+    url: "https://example.com/docs"
+  });
+  assert.equal(getNavigationDecision("file:///tmp/private.txt", appUrl).disposition, "deny");
+  assert.equal(getNavigationDecision("javascript:alert(1)", appUrl).disposition, "deny");
+  assert.equal(getNavigationDecision("not a url", appUrl).reason, "invalid-url");
+
+  const requiredAssets = getRequiredDesktopStaticAssets("/tmp/comate/dist-web");
+  assert.deepEqual(requiredAssets, [
+    {
+      absolutePath: "/tmp/comate/dist-web/index.html",
+      relativePath: "index.html"
+    }
+  ]);
+  assert.match(
+    formatMissingDesktopStaticAssetsMessage("/tmp/comate/dist-web", ["index.html"]),
+    /npm run build/
+  );
+
+  assert.equal(sanitizeWindowBounds(null), null);
+  assert.equal(sanitizeWindowBounds({ width: "wide", height: 900 }), null);
+  assert.deepEqual(sanitizeWindowBounds({ width: 500, height: 500, x: 12.4, y: 20.8 }), {
+    height: DESKTOP_WINDOW_CONFIG.minHeight,
+    width: DESKTOP_WINDOW_CONFIG.minWidth,
+    x: 12,
+    y: 21
+  });
+  assert.deepEqual(sanitizeWindowBounds({ width: 3600, height: 2600 }), {
+    height: DESKTOP_WINDOW_CONFIG.maxHeight,
+    width: DESKTOP_WINDOW_CONFIG.maxWidth
+  });
+  assert.deepEqual(getInitialWindowBounds(null), {
+    height: DESKTOP_WINDOW_CONFIG.defaultHeight,
+    width: DESKTOP_WINDOW_CONFIG.defaultWidth
+  });
+  assert.deepEqual(toPersistedWindowBounds({ width: 1180, height: 820, x: 44, y: 36 }), {
+    height: 820,
+    width: 1180,
+    x: 44,
+    y: 36
+  });
 }
 
 async function testCodexDesktopDetection(root: string): Promise<void> {
@@ -392,12 +465,10 @@ function testSearchUiRendering(): void {
       capabilitySummary: null,
       collapsed: false,
       datePreset: "all",
-      imageTotal: 42,
-      loading: false,
+      imageFacets: createImageFacets(),
       promptState: "all",
       sessionId: undefined,
       sessions: [{ sessionId: "session-a", threadName: "Design notes", count: 3 }],
-      onActiveModuleChange: noop,
       onCapabilitySectionChange: noop,
       onDatePresetChange: noop,
       onPromptStateChange: noop,
@@ -414,8 +485,8 @@ function testSearchUiRendering(): void {
   assert.equal(sidebarMarkup.includes(">All sessions<"), false);
   assert.equal(sidebarMarkup.includes(">Search<"), false);
   assert.equal(sidebarMarkup.includes("search-entry"), false);
-  assert.match(sidebarMarkup, /brand-mark/);
-  assert.match(sidebarMarkup, /comate-icon\.svg/);
+  assert.match(sidebarMarkup, /sidebar-module-header/);
+  assert.match(sidebarMarkup, />图片浏览</);
   assert.equal(sidebarMarkup.includes(">CM<"), false);
   assert.equal(sidebarMarkup.includes("Local"), false);
   assert.equal(sidebarMarkup.includes("Sync"), false);
@@ -430,23 +501,31 @@ function testSearchUiRendering(): void {
       capabilitySummary: null,
       collapsed: true,
       datePreset: "all",
-      imageTotal: 42,
-      loading: false,
+      imageFacets: createImageFacets(),
       promptState: "all",
       sessionId: undefined,
       sessions: [],
-      onActiveModuleChange: noop,
       onCapabilitySectionChange: noop,
       onDatePresetChange: noop,
       onPromptStateChange: noop,
       onSessionChange: noop
     })
   );
-  assert.match(collapsedSidebarMarkup, /rail-brand/);
-  assert.match(collapsedSidebarMarkup, /alt="CoMate"/);
+  assert.match(collapsedSidebarMarkup, /class="sidebar collapsed"/);
+  assert.equal(collapsedSidebarMarkup.includes("rail-brand"), false);
   assert.equal(collapsedSidebarMarkup.includes(">CM<"), false);
 
-  const detailMarkup = renderToStaticMarkup(createElement(DetailPanel, { image }));
+  const railMarkup = renderToStaticMarkup(
+    createElement(GlobalRail, {
+      activeModule: "gallery",
+      onActiveModuleChange: noop
+    })
+  );
+  assert.match(railMarkup, /class="global-rail"/);
+  assert.match(railMarkup, /alt="CoMate"/);
+  assert.match(railMarkup, /aria-label="图片浏览"/);
+
+  const detailMarkup = renderToStaticMarkup(createElement(DetailPanel, { image, onCopyImage: noop }));
   const promptIndex = detailMarkup.indexOf(">Prompt<");
   const detailsIndex = detailMarkup.indexOf(">Details<");
   const titleIndex = detailMarkup.indexOf(">Title<");
@@ -455,6 +534,7 @@ function testSearchUiRendering(): void {
   assert.ok(titleIndex > detailsIndex);
   assert.match(detailMarkup, /class="detail-section prompt-section"/);
   assert.match(detailMarkup, /class="detail-section metadata-section"/);
+  assert.match(detailMarkup, /aria-label="Copy image"/);
   assert.match(detailMarkup, /aria-label="Copy prompt"/);
 }
 
@@ -530,50 +610,50 @@ function testSidebarResizeModel(): void {
   assert.equal(getSidebarWidthCssValue(240), "240px");
 
   const resized = getSidebarDragResult({
-    currentWidth: 212,
+    currentWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth,
     pointerX: 250,
     startPanelState: "expanded",
     startPointerX: 200,
-    startWidth: 212
+    startWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth
   });
   assert.deepEqual(resized, {
     panelState: "expanded",
     shouldCompleteDrag: false,
-    width: 262
+    width: SIDEBAR_WIDTH_CONFIG.defaultWidth + 50
   });
 
   const collapsedFromExpanded = getSidebarDragResult({
-    currentWidth: 212,
+    currentWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth,
     pointerX: 120,
     startPanelState: "expanded",
     startPointerX: 200,
-    startWidth: 212
+    startWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth
   });
   assert.deepEqual(collapsedFromExpanded, {
     panelState: "collapsed",
     shouldCompleteDrag: true,
-    width: 212
+    width: SIDEBAR_WIDTH_CONFIG.defaultWidth
   });
 
   const staysCollapsedUntilThreshold = getSidebarDragResult({
-    currentWidth: 212,
+    currentWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth,
     pointerX: 140,
     startPanelState: "collapsed",
     startPointerX: 100,
-    startWidth: 212
+    startWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth
   });
   assert.deepEqual(staysCollapsedUntilThreshold, {
     panelState: "collapsed",
     shouldCompleteDrag: false,
-    width: 212
+    width: SIDEBAR_WIDTH_CONFIG.defaultWidth
   });
 
   const expandsFromCollapsed = getSidebarDragResult({
-    currentWidth: 212,
-    pointerX: 205,
+    currentWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth,
+    pointerX: 260,
     startPanelState: "collapsed",
     startPointerX: 100,
-    startWidth: 212
+    startWidth: SIDEBAR_WIDTH_CONFIG.defaultWidth
   });
   assert.deepEqual(expandsFromCollapsed, {
     panelState: "expanded",
@@ -600,7 +680,7 @@ function testSidebarResizeHandleRendering(): void {
   assert.match(markup, /class="sidebar-resize-handle resizing"/);
   assert.match(markup, /role="separator"/);
   assert.match(markup, /aria-orientation="vertical"/);
-  assert.match(markup, /aria-valuenow="212"/);
+  assert.match(markup, new RegExp(`aria-valuenow="${SIDEBAR_WIDTH_CONFIG.defaultWidth}"`));
 
   const collapsedMarkup = renderToStaticMarkup(
     createElement(SidebarResizeHandle, {
@@ -621,11 +701,14 @@ function testWorkspaceBarRendering(): void {
       refreshing: false,
       rightPanelState: "expanded",
       title: "Images",
+      viewMode: "grid",
+      viewModeVisible: true,
       onMetaVisibleChange: noop,
       onRefresh: noop,
       onSearchOpen: noop,
       onToggleLeftPanel: noop,
-      onToggleRightPanel: noop
+      onToggleRightPanel: noop,
+      onViewModeChange: noop
     })
   );
 
@@ -635,7 +718,9 @@ function testWorkspaceBarRendering(): void {
   assert.match(expandedMarkup, /data-panel-side="left"/);
   assert.match(expandedMarkup, /data-panel-side="right"/);
   assert.match(expandedMarkup, /aria-expanded="true"/);
-  assert.match(expandedMarkup, />Search</);
+  assert.match(expandedMarkup, />Search images\.\.\.</);
+  assert.match(expandedMarkup, /Grid view/);
+  assert.match(expandedMarkup, /List view/);
   assert.match(expandedMarkup, /Hide grid details/);
   assert.match(expandedMarkup, /workspace-detail-toggle/);
   assert.match(expandedMarkup, /aria-pressed="true"/);
@@ -689,10 +774,12 @@ function testGalleryViewRendering(): void {
       loading: false,
       metaVisible: true,
       selectedId: image.id,
+      viewMode: "grid",
       onSelect: noop
     })
   );
   assert.match(detailedMarkup, /class="tile-meta"/);
+  assert.equal(detailedMarkup.includes("tile-check"), false);
 
   const cleanMarkup = renderToStaticMarkup(
     createElement(GalleryPane, {
@@ -700,11 +787,92 @@ function testGalleryViewRendering(): void {
       loading: false,
       metaVisible: false,
       selectedId: image.id,
+      viewMode: "grid",
       onSelect: noop
     })
   );
   assert.match(cleanMarkup, /gallery gallery-clean/);
   assert.equal(cleanMarkup.includes('class="tile-meta"'), false);
+
+  const listMarkup = renderToStaticMarkup(
+    createElement(GalleryPane, {
+      images: [image],
+      loading: false,
+      metaVisible: false,
+      selectedId: image.id,
+      viewMode: "list",
+      onSelect: noop
+    })
+  );
+  assert.match(listMarkup, /class="gallery-list"/);
+  assert.match(listMarkup, /class="image-list-row selected"/);
+  assert.match(listMarkup, /Prompt/);
+}
+
+async function testImageClipboardModel(): Promise<void> {
+  const image = createImageRecord({
+    fileName: "ig_image_a.png",
+    fileModifiedAt: "2026-05-21T11:46:07.558Z"
+  });
+  const writes: unknown[] = [];
+  const requestedUrls: string[] = [];
+  class MockClipboardItem {
+    constructor(readonly items: Record<string, Blob>) {}
+  }
+
+  const result = await copyImageBinaryToClipboard(image, {
+    ClipboardItem: MockClipboardItem as unknown as typeof ClipboardItem,
+    clipboard: {
+      write: async (items) => {
+        writes.push(items);
+      }
+    },
+    fetch: (async (input) => {
+      requestedUrls.push(String(input));
+      return new Response(new Blob(["image-bytes"], { type: "image/png" }), { status: 200 });
+    }) as typeof fetch
+  });
+
+  assert.deepEqual(result, { mimeType: "image/png", size: 11 });
+  assert.equal(writes.length, 1);
+  assert.equal(requestedUrls[0], "/api/images/image-a/file?v=2026-05-21T11%3A46%3A07.558Z");
+  assert.equal(getClipboardImageMimeType("", "photo.jpeg"), "image/jpeg");
+  assert.equal(getClipboardImageMimeType("", "photo.webp"), "image/webp");
+  assert.equal(getClipboardImageMimeType("", "photo.png"), "image/png");
+  assert.equal(
+    shouldHandleImageCopyShortcut({
+      key: "c",
+      metaKey: true,
+      target: null
+    }),
+    true
+  );
+  assert.equal(
+    shouldHandleImageCopyShortcut({
+      key: "c",
+      metaKey: true,
+      target: { tagName: "INPUT" } as unknown as EventTarget
+    }),
+    false
+  );
+  assert.equal(
+    shouldHandleImageCopyShortcut({
+      key: "c",
+      ctrlKey: true,
+      metaKey: false,
+      target: null
+    }),
+    false
+  );
+  await assert.rejects(
+    () =>
+      copyImageBinaryToClipboard(image, {
+        ClipboardItem: MockClipboardItem as unknown as typeof ClipboardItem,
+        clipboard: null,
+        fetch: (async () => new Response(new Blob(["image-bytes"], { type: "image/png" }))) as typeof fetch
+      }),
+    /Image clipboard is not available/
+  );
 }
 
 function testCapabilityViewRendering(): void {
@@ -718,12 +886,10 @@ function testCapabilityViewRendering(): void {
       capabilitySummary: graph.summary,
       collapsed: false,
       datePreset: "all",
-      imageTotal: 0,
-      loading: false,
+      imageFacets: createImageFacets({ totalImages: 0 }),
       promptState: "all",
       sessionId: undefined,
       sessions: [],
-      onActiveModuleChange: noop,
       onCapabilitySectionChange: noop,
       onDatePresetChange: noop,
       onPromptStateChange: noop,
@@ -844,6 +1010,39 @@ function createCapability(overrides: Partial<CapabilityRecord>): CapabilityRecor
     issues: [],
     dependencies: [],
     metadata: {},
+    ...overrides
+  };
+}
+
+function createImageRecord(overrides: Partial<ImageRecord> = {}): ImageRecord {
+  return {
+    id: "image-a",
+    filePath: "/tmp/image-a.png",
+    fileName: "ig_image_a.png",
+    sessionId: "session-a",
+    threadName: "制作 Apple 3D 海报",
+    generatedAt: "2026-05-21T11:46:07.558Z",
+    fileModifiedAt: "2026-05-21T11:46:07.558Z",
+    prompt: "Create a clean Apple poster with glass detail.",
+    width: 1,
+    height: 1,
+    sizeBytes: 68,
+    callId: "ig_image_a",
+    sessionPath: "/tmp/session.jsonl",
+    hasPrompt: true,
+    ...overrides
+  };
+}
+
+function createImageFacets(overrides: Partial<ImageSearchResult["facets"]> = {}): ImageSearchResult["facets"] {
+  return {
+    sessions: [],
+    last30Days: 18,
+    last7Days: 9,
+    today: 2,
+    totalImages: 42,
+    withPrompt: 30,
+    withoutPrompt: 12,
     ...overrides
   };
 }

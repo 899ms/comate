@@ -1,15 +1,23 @@
 import electron from "electron";
 import type { BrowserWindow as BrowserWindowType } from "electron";
 
-const { BrowserWindow, shell } = electron;
+import { DESKTOP_WINDOW_CONFIG, getInitialWindowBounds, type DesktopWindowBounds } from "../domain/windowState.js";
+import { installNavigationGuard } from "./navigationGuard.js";
 
-export function createMainWindow(url: string): BrowserWindowType {
+const { BrowserWindow } = electron;
+
+export interface CreateMainWindowOptions {
+  initialBounds?: DesktopWindowBounds | null;
+}
+
+export function createMainWindow(url: string, options: CreateMainWindowOptions = {}): BrowserWindowType {
+  const bounds = getInitialWindowBounds(options.initialBounds);
   const window = new BrowserWindow({
-    autoHideMenuBar: true,
-    backgroundColor: "#f6f6f3",
-    height: 860,
-    minHeight: 680,
-    minWidth: 980,
+    autoHideMenuBar: process.platform !== "darwin",
+    backgroundColor: DESKTOP_WINDOW_CONFIG.backgroundColor,
+    height: bounds.height,
+    minHeight: DESKTOP_WINDOW_CONFIG.minHeight,
+    minWidth: DESKTOP_WINDOW_CONFIG.minWidth,
     show: false,
     title: "CoMate",
     webPreferences: {
@@ -18,17 +26,16 @@ export function createMainWindow(url: string): BrowserWindowType {
       partition: "comate-memory",
       sandbox: true
     },
-    width: 1280
+    width: bounds.width,
+    x: bounds.x,
+    y: bounds.y
   });
 
   window.once("ready-to-show", () => {
     window.show();
   });
 
-  window.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-    void shell.openExternal(nextUrl);
-    return { action: "deny" };
-  });
+  installNavigationGuard(window, url);
 
   void window.loadURL(url);
   return window;

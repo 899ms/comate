@@ -1,6 +1,8 @@
 import {
   Captions,
   CaptionsOff,
+  Grid2X2,
+  List,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -20,11 +22,14 @@ interface WorkspaceBarProps {
   rightPanelState: WorkspacePanelState;
   searchVisible?: boolean;
   title: string;
+  viewMode?: "grid" | "list";
+  viewModeVisible?: boolean;
   onMetaVisibleChange?: (visible: boolean) => void;
   onRefresh: () => void;
   onSearchOpen: () => void;
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
+  onViewModeChange?: (value: "grid" | "list") => void;
 }
 
 export function WorkspaceBar({
@@ -36,11 +41,14 @@ export function WorkspaceBar({
   rightPanelState,
   searchVisible = true,
   title,
+  viewMode = "grid",
+  viewModeVisible = false,
   onMetaVisibleChange,
   onRefresh,
   onSearchOpen,
   onToggleLeftPanel,
-  onToggleRightPanel
+  onToggleRightPanel,
+  onViewModeChange
 }: WorkspaceBarProps) {
   const leftExpanded = leftPanelState === "expanded";
   const rightExpanded = rightPanelState === "expanded";
@@ -63,9 +71,32 @@ export function WorkspaceBar({
         )}
       </button>
 
-      <div className="workspace-title">
-        <h1>{title}</h1>
-      </div>
+      {viewModeVisible && onViewModeChange ? (
+        <div className="view-mode-switch" aria-label="Image view mode">
+          <button
+            className={viewMode === "grid" ? "active" : ""}
+            type="button"
+            onClick={() => onViewModeChange("grid")}
+            title="Grid view"
+            aria-label="Grid view"
+            aria-pressed={viewMode === "grid"}
+          >
+            <Grid2X2 size={16} aria-hidden="true" />
+          </button>
+          <button
+            className={viewMode === "list" ? "active" : ""}
+            type="button"
+            onClick={() => onViewModeChange("list")}
+            title="List view"
+            aria-label="List view"
+            aria-pressed={viewMode === "list"}
+          >
+            <List size={17} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
+      <h1 className="workspace-title">{title}</h1>
 
       <div className="workspace-actions" aria-label="Workspace actions">
         {searchVisible ? (
@@ -76,7 +107,7 @@ export function WorkspaceBar({
             aria-label="Search workspace"
           >
             <Search size={14} aria-hidden="true" />
-            <span>Search</span>
+            <span>Search images...</span>
           </button>
         ) : null}
         {metaToggleVisible && onMetaVisibleChange ? (

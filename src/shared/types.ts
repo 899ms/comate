@@ -38,6 +38,9 @@ export interface ImageSearchResult {
   total: number;
   facets: {
     sessions: SessionFacet[];
+    last30Days: number;
+    last7Days: number;
+    today: number;
     totalImages: number;
     withPrompt: number;
     withoutPrompt: number;

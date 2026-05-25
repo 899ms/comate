@@ -6,13 +6,21 @@ interface GalleryPaneProps {
   loading: boolean;
   metaVisible: boolean;
   selectedId: string | null;
+  viewMode: "grid" | "list";
   onSelect: (image: ImageRecord) => void;
 }
 
-export function GalleryPane({ images, loading, metaVisible, selectedId, onSelect }: GalleryPaneProps) {
+export function GalleryPane({ images, loading, metaVisible, selectedId, viewMode, onSelect }: GalleryPaneProps) {
   return (
     <section className="gallery-pane" aria-label="Generated image library">
-      <Gallery images={images} selectedId={selectedId} loading={loading} metaVisible={metaVisible} onSelect={onSelect} />
+      <Gallery
+        images={images}
+        selectedId={selectedId}
+        loading={loading}
+        metaVisible={metaVisible}
+        viewMode={viewMode}
+        onSelect={onSelect}
+      />
     </section>
   );
 }

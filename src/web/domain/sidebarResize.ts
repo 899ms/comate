@@ -23,10 +23,10 @@ export interface SidebarDragResult {
 }
 
 export const SIDEBAR_WIDTH_CONFIG: SidebarWidthConfig = {
-  collapsedWidth: 68,
-  collapseThreshold: 156,
-  defaultWidth: 212,
-  maxWidth: 300,
+  collapsedWidth: 0,
+  collapseThreshold: 148,
+  defaultWidth: 204,
+  maxWidth: 292,
   minWidth: 176
 };
 

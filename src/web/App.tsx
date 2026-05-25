@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import type {
   CapabilityRecord,
@@ -21,6 +21,7 @@ import { CapabilityInspector } from "./components/CapabilityInspector.js";
 import { CapabilityWorkspace } from "./components/CapabilityWorkspace.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { GalleryPane } from "./components/GalleryPane.js";
+import { GlobalRail } from "./components/GlobalRail.js";
 import { SearchOverlay } from "./components/SearchOverlay.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { SidebarResizeHandle } from "./components/SidebarResizeHandle.js";
@@ -28,6 +29,7 @@ import { StartupScreen, type StartupScreenMode } from "./components/StartupScree
 import { WorkspaceBar } from "./components/WorkspaceBar.js";
 import { getSidebarWidthCssValue, SIDEBAR_WIDTH_CONFIG } from "./domain/sidebarResize.js";
 import { filterCapabilities, getSelectedCapability } from "./domain/capabilityView.js";
+import { copyImageBinaryToClipboard, shouldHandleImageCopyShortcut } from "./domain/imageClipboard.js";
 import { type AppModule, type CapabilitySection, getModuleTitle } from "./domain/navigation.js";
 import {
   getImageWorkspaceHeader,
@@ -42,6 +44,9 @@ const EMPTY_RESULT: ImageSearchResult = {
   total: 0,
   facets: {
     sessions: [],
+    last30Days: 0,
+    last7Days: 0,
+    today: 0,
     totalImages: 0,
     withPrompt: 0,
     withoutPrompt: 0
@@ -58,6 +63,7 @@ export function App() {
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [result, setResult] = useState<ImageSearchResult>(EMPTY_RESULT);
   const [galleryMetaVisible, setGalleryMetaVisible] = useState(true);
+  const [galleryViewMode, setGalleryViewMode] = useState<"grid" | "list">("grid");
   const [activeModule, setActiveModule] = useState<AppModule>("gallery");
   const [capabilitySection, setCapabilitySection] = useState<CapabilitySection>("overview");
   const [capabilities, setCapabilities] = useState<CapabilityScanResult | null>(null);
@@ -201,6 +207,40 @@ export function App() {
     () => result.items.find((image) => image.id === selectedId) ?? null,
     [result.items, selectedId]
   );
+  const handleCopySelectedImage = useCallback(async (): Promise<void> => {
+    if (!selectedImage) {
+      return;
+    }
+
+    try {
+      await copyImageBinaryToClipboard(selectedImage);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Copy image failed.");
+    }
+  }, [selectedImage]);
+
+  useEffect(() => {
+    if (activeModule !== "gallery" || !selectedImage) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (!shouldHandleImageCopyShortcut(event)) {
+        return;
+      }
+      if (window.getSelection()?.toString()) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleCopySelectedImage();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeModule, handleCopySelectedImage, selectedImage]);
+
   const workspaceHeader = useMemo(
     () =>
       getImageWorkspaceHeader({
@@ -335,18 +375,20 @@ export function App() {
       {error ? <div className="error-strip">{error}</div> : null}
 
       <div className={workspaceClassName} style={workspaceStyle}>
+        <GlobalRail
+          activeModule={activeModule}
+          onActiveModuleChange={setActiveModule}
+        />
         <Sidebar
           activeModule={activeModule}
           capabilitySection={capabilitySection}
           capabilitySummary={capabilities?.summary ?? null}
           collapsed={leftPanelState === "collapsed"}
           datePreset={datePreset}
-          imageTotal={result.total}
-          loading={loading}
+          imageFacets={result.facets}
           promptState={promptState}
           sessionId={sessionId}
           sessions={result.facets.sessions}
-          onActiveModuleChange={setActiveModule}
           onCapabilitySectionChange={setCapabilitySection}
           onDatePresetChange={setDatePreset}
           onPromptStateChange={setPromptState}
@@ -362,6 +404,8 @@ export function App() {
             leftPanelState={leftPanelState}
             metaVisible={galleryMetaVisible}
             metaToggleVisible={activeModule === "gallery"}
+            viewMode={galleryViewMode}
+            viewModeVisible={activeModule === "gallery"}
             refreshing={activeModule === "gallery" ? refreshing : capabilityRefreshing}
             refreshLabel={activeModule === "gallery" ? "Refresh library" : "Rescan capabilities"}
             rightPanelState={rightPanelState}
@@ -372,6 +416,7 @@ export function App() {
             onSearchOpen={() => activeModule === "gallery" && setSearchOpen(true)}
             onToggleLeftPanel={() => setLeftPanelState((current) => togglePanelState(current))}
             onToggleRightPanel={() => setRightPanelState((current) => togglePanelState(current))}
+            onViewModeChange={setGalleryViewMode}
           />
           {activeModule === "gallery" ? (
             <GalleryPane
@@ -379,6 +424,7 @@ export function App() {
               loading={loading}
               metaVisible={galleryMetaVisible}
               selectedId={selectedId}
+              viewMode={galleryViewMode}
               onSelect={selectImage}
             />
           ) : (
@@ -395,7 +441,11 @@ export function App() {
           )}
         </section>
         {activeModule === "gallery" ? (
-          <DetailPanel collapsed={rightPanelState === "collapsed"} image={selectedImage} />
+          <DetailPanel
+            collapsed={rightPanelState === "collapsed"}
+            image={selectedImage}
+            onCopyImage={() => void handleCopySelectedImage()}
+          />
         ) : (
           <CapabilityInspector
             collapsed={rightPanelState === "collapsed"}

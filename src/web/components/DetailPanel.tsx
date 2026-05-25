@@ -7,9 +7,10 @@ import { formatBytes, formatFullDate, middleEllipsis } from "../utils/format.js"
 interface DetailPanelProps {
   collapsed?: boolean;
   image: ImageRecord | null;
+  onCopyImage?: (image: ImageRecord) => void | Promise<void>;
 }
 
-export function DetailPanel({ collapsed = false, image }: DetailPanelProps) {
+export function DetailPanel({ collapsed = false, image, onCopyImage }: DetailPanelProps) {
   if (collapsed) {
     return <aside className="detail-panel collapsed" aria-hidden="true" />;
   }
@@ -31,6 +32,10 @@ export function DetailPanel({ collapsed = false, image }: DetailPanelProps) {
       </div>
 
       <div className="detail-actions">
+        <button disabled={!onCopyImage} title="Copy image" aria-label="Copy image" onClick={() => void onCopyImage?.(image)}>
+          <Copy size={16} />
+          Copy
+        </button>
         <button onClick={() => openImage(image.id, "openFile")}>
           <ExternalLink size={16} />
           Open
