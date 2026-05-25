@@ -6,9 +6,18 @@
   <img src="./docs/images/comate-icon.png" alt="CoMate 图标" width="96" height="96">
 </p>
 
-CoMate 是一个给 Codex 桌面应用使用的本地图像图库。它会索引 Codex Desktop 生成在你电脑上的图片，把图片和本地 session 元数据、prompt 关联起来，然后提供一个干净、私密的本地浏览界面。
+CoMate 是一个给 Codex Desktop 使用的本地 companion app。它会索引 Codex 在你电脑上生成的图片，把图片和本地 session 元数据、prompt 关联起来，并提供一个干净、私密的图片浏览界面和 Codex 能力图谱。
 
 ![CoMate 截图](./docs/images/comate-screenshot.png)
+
+## 功能亮点
+
+- 用本地图库浏览 Codex Desktop 生成的图片。
+- 支持搜索、按时间筛选、按 prompt 状态筛选，并可在生成 session 之间切换。
+- 查看 prompt、图片元数据、文件路径和所在目录。
+- 支持把选中图片直接复制到 macOS 剪贴板。
+- 查看本机 Codex 的 Skills、Plugins、MCP、Commands、Automations 和 Issues。
+- 完全本地运行，不需要登录，没有统计分析、遥测或云同步。
 
 ## 为什么做它
 
@@ -74,6 +83,8 @@ npm run package:mac
 ```
 
 构建产物会输出到 `release/`。
+
+GitHub Actions 里的 **Package macOS App** workflow 也可以构建未签名的 macOS 产物。推送到 `main` 会自动运行 CI，推送 `v*` tag 时可以发布 release artifacts。
 
 ## Web 生产模式
 
